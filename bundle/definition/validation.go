@@ -1,6 +1,7 @@
 package definition
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/pkg/errors"
@@ -32,7 +33,7 @@ func (s *Schema) Validate(data interface{}) ([]ValidationError, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to process data")
 	}
-	valErrs, err := def.ValidateBytes(payload)
+	valErrs, err := def.ValidateBytes(context.Background(), payload)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to perform validation")
 	}
