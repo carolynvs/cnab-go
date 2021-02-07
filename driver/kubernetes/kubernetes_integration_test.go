@@ -4,6 +4,7 @@ package kubernetes
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -110,6 +111,7 @@ func TestDriver_Run_Integration(t *testing.T) {
 }
 
 func createTestPVC(t *testing.T) (string, func()) {
+	ctx := context.Background()
 	pvc := &v1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "cnab-driver-shared",
@@ -127,11 +129,11 @@ func createTestPVC(t *testing.T) (string, func()) {
 	require.NoError(t, err, "BuildConfigFromFlags failed")
 	coreClient, err := coreclientv1.NewForConfig(conf)
 	pvcClient := coreClient.PersistentVolumeClaims("default")
-	pvc, err = pvcClient.Create(pvc)
+	pvc, err = pvcClient.Create(ctx, pvc, metav1.CreateOptions{})
 	require.NoError(t, err, "create pvc failed")
 
 	return pvc.Name, func() {
-		pvcClient.Delete(pvc.Name, &metav1.DeleteOptions{})
+		pvcClient.Delete(ctx, pvc.Name, metav1.DeleteOptions{})
 	}
 }
 
