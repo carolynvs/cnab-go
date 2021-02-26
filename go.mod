@@ -2,6 +2,11 @@ module github.com/cnabio/cnab-go
 
 go 1.13
 
+// Make our use of jsonschema thread-safe
+// Upstream Issue: https://github.com/qri-io/jsonschema/issues/80
+// Local Fix: https://github.com/carolynvs/jsonschema/tree/local-keyword-registry
+replace github.com/qri-io/jsonschema => github.com/carolynvs/jsonschema v0.2.1-0.20210120214917-11cc5e4545c8
+
 require (
 	cloud.google.com/go v0.39.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
@@ -56,7 +61,8 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4 // indirect
 	github.com/prometheus/common v0.7.0 // indirect
 	github.com/prometheus/procfs v0.0.5 // indirect
-	github.com/qri-io/jsonschema v0.1.1
+	github.com/qri-io/jsonpointer v0.1.1
+	github.com/qri-io/jsonschema v0.2.1-0.20201028142641-08d62a2939dc
 	github.com/stretchr/testify v1.5.1
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2 // indirect
 	github.com/theupdateframework/notary v0.6.1 // indirect
