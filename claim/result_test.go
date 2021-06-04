@@ -255,7 +255,7 @@ func TestResultOutputs_GetGeneratedByBundle(t *testing.T) {
 }
 
 func TestResult_HasLogs(t *testing.T) {
-	c, err := New("test", ActionInstall, bundle.Bundle{}, nil)
+	c, err := New("test", ActionInstall, bundle.Bundle{}, "", "", nil)
 	require.NoError(t, err)
 	r, _ := c.NewResult(StatusSucceeded)
 	require.NoError(t, err)

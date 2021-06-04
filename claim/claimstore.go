@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -36,8 +37,11 @@ var (
 	ErrOutputNotFound = errors.New("Output does not exist")
 )
 
+var _ Provider = &Store{}
+
 // Store is a persistent store for claims.
 type Store struct {
+	lock         sync.Mutex
 	backingStore crud.ManagedStore
 	encrypt      EncryptionHandler
 	decrypt      EncryptionHandler
@@ -66,9 +70,10 @@ func NewClaimStore(store crud.ManagedStore, encrypt EncryptionHandler, decrypt E
 func NewClaimStoreFileExtensions() map[string]string {
 	const json = ".json"
 	return map[string]string{
-		ItemTypeClaims:  json,
-		ItemTypeResults: json,
-		ItemTypeOutputs: "",
+		ItemTypeInstallations: json,
+		ItemTypeClaims:        json,
+		ItemTypeResults:       json,
+		ItemTypeOutputs:       "",
 	}
 }
 
@@ -135,35 +140,38 @@ func (s Store) ListOutputs(resultID string) ([]string, error) {
 	return outputNames, nil
 }
 
-func (s Store) ReadInstallation(installation string) (Installation, error) {
-	handleClose, err := s.backingStore.HandleConnect()
-	defer handleClose()
+func (s Store) ReadInstallation(name string) (Installation, error) {
+	bytes, err := s.backingStore.Read(ItemTypeInstallations, name)
 	if err != nil {
-		return Installation{}, err
+		return Installation{}, s.handleNotExistsError(err, ErrInstallationNotFound)
 	}
 
-	claims, err := s.ReadAllClaims(installation)
-	if err != nil {
-		return Installation{}, err
-	}
-
-	hierarchy := make(Claims, len(claims))
-	for i, c := range claims {
-		results, err := s.ReadAllResults(c.ID)
-		if err != nil {
-			return Installation{}, err
-		}
-
-		claimResults := Results(results)
-		c.results = &claimResults
-		hierarchy[i] = c
-	}
-
-	i := NewInstallation(installation, hierarchy)
-
-	return i, nil
+	installation := Installation{}
+	err = json.Unmarshal(bytes, &installation)
+	return installation, err
 }
 
+func (s Store) ReadAllInstallations() ([]Installation, error) {
+	items, err := s.backingStore.ReadAll(ItemTypeInstallations, "")
+	if err != nil {
+		return nil, err
+	}
+
+	installations := make(InstallationByName, len(items))
+	for i, bytes := range items {
+		var installation Installation
+		err = json.Unmarshal(bytes, &installation)
+		if err != nil {
+			return nil, errors.Wrap(err, "error unmarshaling installation")
+		}
+		installations[i] = installation
+	}
+
+	sort.Sort(installations)
+	return installations, nil
+}
+
+// DEPRECATED: Use Store.ReadInstallation instead, now that status is stored on the installation document.
 func (s Store) ReadInstallationStatus(installation string) (Installation, error) {
 	handleClose, err := s.backingStore.HandleConnect()
 	defer handleClose()
@@ -202,7 +210,9 @@ func (s Store) ReadInstallationStatus(installation string) (Installation, error)
 
 		claims = append(claims, c)
 
-		return NewInstallation(installation, claims), nil
+		i := &Installation{Name: installation}
+		i.LoadClaims(claims)
+		return *i, nil
 	}
 
 	return Installation{}, ErrInstallationNotFound
@@ -465,6 +475,15 @@ func (s Store) ReadOutput(c Claim, r Result, outputName string) (Output, error) 
 	return NewOutput(c, r, outputName, bytes), nil
 }
 
+func (s Store) SaveInstallation(i Installation) error {
+	bytes, err := json.MarshalIndent(i, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return s.backingStore.Save(ItemTypeInstallations, "", i.Name, bytes)
+}
+
 func (s Store) SaveClaim(c Claim) error {
 	handleClose, err := s.backingStore.HandleConnect()
 	defer handleClose()
@@ -487,16 +506,52 @@ func (s Store) SaveClaim(c Claim) error {
 		return err
 	}
 
-	return s.backingStore.Save(ItemTypeInstallations, "", c.Installation, nil)
+	// Update the installation status when the action performed modifies installation resources
+	// Ignore actions like "logs", or "status".
+	if modifies, _ := c.IsModifyingAction(); modifies {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+		i, err := s.ReadInstallation(c.Installation)
+		if err != nil {
+			return err
+		}
+
+		i = i.ApplyClaim(c)
+		return s.SaveInstallation(i)
+	}
+
+	return nil
 }
 
+// SaveResult saves the specified Result and updates the status of the Installation.
 func (s Store) SaveResult(r Result) error {
 	bytes, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	return s.backingStore.Save(ItemTypeResults, r.ClaimID, r.ID, bytes)
+	err = s.backingStore.Save(ItemTypeResults, r.ClaimID, r.ID, bytes)
+	if err != nil {
+		return err
+	}
+
+	// Update the installation status when the action performed modifies installation resources
+	// Ignore actions like "logs", or "status".
+	if r.claim != nil {
+		if modifies, _ := r.claim.IsModifyingAction(); modifies {
+			s.lock.Lock()
+			defer s.lock.Unlock()
+			i, err := s.ReadInstallation(r.claim.Installation)
+			if err != nil {
+				return err
+			}
+
+			i = i.ApplyResult(r)
+			return s.SaveInstallation(i)
+		}
+	}
+
+	return nil
 }
 
 func (s Store) SaveOutput(o Output) error {

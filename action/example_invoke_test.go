@@ -35,7 +35,7 @@ func Example_invoke() {
 	}
 
 	// Create a claim for running the custom logs action based on the previous claim
-	c, err := existingClaim.NewClaim("logs", existingClaim.Bundle, parameters)
+	c, err := existingClaim.NewClaim("logs", existingClaim.Bundle, existingClaim.BundleReference, existingClaim.BundleDigest, parameters)
 	if err != nil {
 		panic(err)
 	}
@@ -88,14 +88,14 @@ func Example_invoke() {
 	//     "CNAB_ACTION": "logs",
 	//     "CNAB_BUNDLE_NAME": "mybuns",
 	//     "CNAB_BUNDLE_VERSION": "1.0.0",
-	//     "CNAB_CLAIMS_VERSION": "1.0.0-DRAFT+b5ed2f3",
+	//     "CNAB_CLAIMS_VERSION": "1.0.0-DRAFT.1",
 	//     "CNAB_INSTALLATION_NAME": "hello",
 	//     "CNAB_REVISION": "claim-rev"
 	//   },
 	//   "files": {
 	//     "/cnab/app/image-map.json": "{}",
 	//     "/cnab/bundle.json": "{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}}",
-	//     "/cnab/claim.json": "{\"schemaVersion\":\"1.0.0-DRAFT+b5ed2f3\",\"id\":\"claim-id\",\"installation\":\"hello\",\"revision\":\"claim-rev\",\"created\":\"2020-04-18T01:02:03.000000004Z\",\"action\":\"logs\",\"bundle\":{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}}}"
+	//     "/cnab/claim.json": "{\"schemaVersion\":\"1.0.0-DRAFT.1\",\"id\":\"claim-id\",\"installation\":\"hello\",\"revision\":\"claim-rev\",\"created\":\"2020-04-18T01:02:03.000000004Z\",\"action\":\"logs\",\"bundle\":{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}},\"bundleReference\":\"example.com/myorg/mybuns:v1.0.0\",\"bundleDigest\":\"sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}"
 	//   },
 	//   "outputs": {},
 	//   "Bundle": {

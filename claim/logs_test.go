@@ -12,7 +12,12 @@ import (
 
 func addTestRunWithLogs(t *testing.T, cp Provider, logContent string) Claim {
 	b := bundle.Bundle{}
-	c, err := New("test", ActionInstall, b, nil)
+
+	i, err := NewInstallation("", "test", b, "example.com/mybun", "sha256:abc123")
+	require.NoError(t, err)
+	require.NoError(t, cp.SaveInstallation(i))
+
+	c, err := New(i.Name, ActionInstall, b, "example.com/mybun", "sha256:abc123", nil)
 	require.NoError(t, err)
 	require.NoError(t, cp.SaveClaim(c))
 
@@ -53,7 +58,11 @@ func TestGetLogs_NotFound(t *testing.T) {
 	cp := NewClaimStore(crud.NewBackingStore(backingStore), nil, nil)
 
 	b := bundle.Bundle{}
-	c, err := New("test", ActionInstall, b, nil)
+	i, err := NewInstallation("", "test", b, "example.com/mybun", "sha256:abc123")
+	require.NoError(t, err)
+	require.NoError(t, cp.SaveInstallation(i))
+
+	c, err := New("test", ActionInstall, b, "example.com/mybun", "sha256:abc123", nil)
 	require.NoError(t, err)
 	require.NoError(t, cp.SaveClaim(c))
 

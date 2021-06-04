@@ -173,6 +173,18 @@ func (a Action) SaveInitialClaim(c claim.Claim, status string) error {
 		return errors.New("the action claims provider is not set")
 	}
 
+	if _, err := a.Claims.ReadInstallation(c.Installation); err != nil && strings.Contains(err.Error(), claim.ErrInstallationNotFound.Error()) {
+		i, err := claim.NewInstallation("", c.Installation, c.Bundle, c.BundleReference, c.BundleDigest)
+		if err != nil {
+			return err
+		}
+
+		err = a.Claims.SaveInstallation(i)
+		if err != nil {
+			return err
+		}
+	}
+
 	err := a.saveClaimWithStatus(c, status)
 	return errors.Wrap(err, "could not save the pending action's status, the bundle was not executed")
 }

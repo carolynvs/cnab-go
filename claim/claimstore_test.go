@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,6 +72,8 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 	cp := NewClaimStore(crud.NewBackingStore(backingStore), nil, nil)
 
 	bun := bundle.Bundle{
+		Name:    "mybun",
+		Version: "0.1.0",
 		Definitions: map[string]*definition.Schema{
 			"output1": {
 				Type: "string",
@@ -89,8 +92,16 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 			},
 		},
 	}
+
+	createInstallation := func(installation string) Installation {
+		i, err := NewInstallation("", installation, bun, "example.com/mybun", "sha256:abc123")
+		require.NoError(t, err, "NewInstallation failed")
+		require.NoError(t, cp.SaveInstallation(i), "SaveInstallation failed")
+		return i
+	}
+
 	createClaim := func(installation string, action string) Claim {
-		c, err := New(installation, action, bun, nil)
+		c, err := New(installation, action, bun, "example.com/mybun:v0.1.0", "sha256:abc123", nil)
 		require.NoError(t, err, "New claim failed")
 
 		err = cp.SaveClaim(c)
@@ -119,35 +130,42 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 	}
 
 	// Create the foo installation data
-	const foo = "foo"
-	c := createClaim(foo, ActionInstall)
+	i := createInstallation("foo")
+	c := createClaim(i.Name, ActionInstall)
 	r := createResult(c, StatusSucceeded)
 	createOutput(c, r, "output1")
 
-	c = createClaim(foo, ActionUpgrade)
+	c = createClaim(i.Name, ActionUpgrade)
 	r = createResult(c, StatusSucceeded)
 	createOutput(c, r, "output1")
 	createOutput(c, r, "output2")
 	createOutput(c, r, r.ID+"-output3") // Test bug in how we read output names by having the name include characters from the result id
 
-	c = createClaim(foo, "test")
+	c = createClaim(i.Name, "test")
 	createResult(c, StatusFailed)
 
-	c = createClaim(foo, ActionUninstall)
+	c = createClaim(i.Name, ActionUninstall)
 	createResult(c, StatusSucceeded)
 
+	i.Status = InstallationStatus{
+		ClaimID:      r.ClaimID,
+		ResultID:     r.ID,
+		ResultStatus: r.Status,
+	}
+	require.NoError(t, cp.SaveInstallation(i))
+
 	// Create the bar installation data
-	const bar = "bar"
-	c = createClaim(bar, ActionInstall)
+	i = createInstallation("bar")
+	c = createClaim(i.Name, ActionInstall)
 	createResult(c, StatusRunning)
 	createResult(c, StatusSucceeded)
 
 	// Create the baz installation data
-	const baz = "baz"
-	c = createClaim(baz, ActionInstall)
+	i = createInstallation("baz")
+	c = createClaim(i.Name, ActionInstall)
 	createResult(c, StatusFailed)
 
-	createClaim(baz, ActionInstall)
+	createClaim(i.Name, ActionInstall)
 
 	backingStore.ResetCounts()
 	return cp, backingStore
@@ -169,9 +187,11 @@ func TestCanSaveReadAndDelete(t *testing.T) {
 	is := assert.New(t)
 	must := require.New(t)
 
-	c1, err := New("foo", ActionUnknown, exampleBundle, nil)
+	i, err := NewInstallation("", "foo", exampleBundle, "", "")
 	must.NoError(err)
-	c1.Bundle = bundle.Bundle{Name: "foobundle", Version: "0.1.2"}
+
+	c1, err := New("foo", ActionUnknown, exampleBundle, exampleRef, exampleDigest, nil)
+	must.NoError(err)
 
 	tempDir, err := ioutil.TempDir("", "cnabtest")
 	must.NoError(err, "Failed to create temp dir")
@@ -181,6 +201,7 @@ func TestCanSaveReadAndDelete(t *testing.T) {
 	datastore := crud.NewFileSystemStore(storeDir, NewClaimStoreFileExtensions())
 	store := NewClaimStore(crud.NewBackingStore(datastore), nil, nil)
 
+	store.SaveInstallation(i)
 	err = store.SaveClaim(c1)
 	must.NoError(err, "SaveClaim failed")
 	_, err = datastore.Read(ItemTypeInstallations, c1.Installation)
@@ -212,7 +233,9 @@ func TestCanSaveReadAndDelete(t *testing.T) {
 func TestCanUpdate(t *testing.T) {
 	is := assert.New(t)
 	b := bundle.Bundle{Name: "foobundle", Version: "0.1.2"}
-	c1, err := New("foo", ActionUnknown, b, nil)
+	i, err := NewInstallation("", "foo", b, "", "")
+	is.NoError(err)
+	c1, err := New(i.Name, ActionUnknown, b, "", "", nil)
 	is.NoError(err)
 
 	tempDir, err := ioutil.TempDir("", "cnabtest")
@@ -223,10 +246,13 @@ func TestCanUpdate(t *testing.T) {
 	datastore := crud.NewFileSystemStore(storeDir, NewClaimStoreFileExtensions())
 	store := NewClaimStore(crud.NewBackingStore(datastore), nil, nil)
 
+	err = store.SaveInstallation(i)
+	require.NoError(t, err)
+
 	err = store.SaveClaim(c1)
 	require.NoError(t, err)
 
-	c2, err := c1.NewClaim(ActionInstall, b, nil)
+	c2, err := c1.NewClaim(ActionInstall, b, "", "", nil)
 	require.NoError(t, err, "NewClaim failed")
 
 	err = store.SaveClaim(c2)
@@ -299,18 +325,34 @@ func TestClaimStore_Installations(t *testing.T) {
 		require.NoError(t, err, "ReadInstallation failed")
 
 		assert.Equal(t, "foo", foo.Name)
-		require.Len(t, foo.Claims, 4, "Expected 4 claims")
-		assert.Equal(t, StatusSucceeded, foo.GetLastStatus(), "expected the status to be loaded on the installation")
-		assert.Equal(t, "foo", foo.Claims[0].Installation, "expected the claim to be associated with the installation")
-		assert.Equal(t, ActionInstall, foo.Claims[0].Action)
-		assert.Equal(t, ActionUpgrade, foo.Claims[1].Action)
-		assert.Equal(t, "test", foo.Claims[2].Action)
-		assert.Equal(t, ActionUninstall, foo.Claims[3].Action)
+		assert.Equal(t, "example.com/mybun", foo.BundleRepository)
+		assert.Equal(t, "0.1.0", foo.BundleVersion)
+		assert.Equal(t, "sha256:abc123", foo.BundleDigest)
+		assert.NotEmpty(t, foo.Created)
+		assert.Equal(t, foo.Created, foo.Modified)
+		assert.Equal(t, StatusSucceeded, foo.GetStatus())
 
 		assertSingleConnection(t, datastore)
 	})
 
 	t.Run("ReadInstallation - invalid installation", func(t *testing.T) {
+		foo, err := cp.ReadInstallation("missing")
+		require.EqualError(t, err, "Installation does not exist")
+		assert.Empty(t, foo)
+	})
+
+	t.Run("ReadAllInstallations", func(t *testing.T) {
+		datastore.ResetCounts()
+		foo, err := cp.ReadInstallation("foo")
+		require.NoError(t, err, "ReadInstallation failed")
+
+		assert.Equal(t, "foo", foo.Name)
+		assert.Equal(t, StatusSucceeded, foo.GetStatus(), "Listing installations should include their status")
+
+		assertSingleConnection(t, datastore)
+	})
+
+	t.Run("ReadAllInstallations - invalid installation", func(t *testing.T) {
 		foo, err := cp.ReadInstallation("missing")
 		require.EqualError(t, err, "Installation does not exist")
 		assert.Empty(t, foo)
@@ -611,7 +653,10 @@ func TestCanUpdateOutputs(t *testing.T) {
 	is := assert.New(t)
 	must := require.New(t)
 
-	claim, err := New("foo", ActionUnknown, exampleBundle, nil)
+	_, err := NewInstallation("", "foo", exampleBundle, "example.com/mybun", "sha256:abc123")
+	must.NoError(err)
+
+	claim, err := New("foo", ActionUnknown, exampleBundle, exampleRef, exampleDigest, nil)
 	must.NoError(err)
 
 	tempDir, err := ioutil.TempDir("", "cnabgotest")
@@ -664,7 +709,10 @@ func TestStore_EncryptClaims(t *testing.T) {
 	s := NewMockStore(b64encode, b64decode)
 	backingStore := s.GetBackingStore()
 
-	err := s.SaveClaim(exampleClaim)
+	err := s.SaveInstallation(exampleInstallation)
+	require.NoError(t, err, "SaveInstallation failed")
+
+	err = s.SaveClaim(exampleClaim)
 	require.NoError(t, err, "SaveClaim failed")
 
 	// Verify that it was encrypted at rest
@@ -708,16 +756,17 @@ func TestStore_EncryptOutputs(t *testing.T) {
 			},
 		},
 	}
-	c, err := New("wordpress", ActionInstall, b, nil)
+	i, err := NewInstallation("", "wordpress", b, "example.com/wordpress", "sha256:abc123")
+	require.NoError(t, err, "NewInstallation failed")
+	require.NoError(t, s.SaveInstallation(i), "SaveInstallation failed")
+
+	c, err := New("wordpress", ActionInstall, b, "example.com/wordpress", "sha256:abc123", nil)
 	require.NoError(t, err, "New claim failed")
+	require.NoError(t, s.SaveClaim(c), "SaveClaim failed")
 
 	r, err := c.NewResult(StatusSucceeded)
 	require.NoError(t, err, "NewResult failed")
-
-	err = s.SaveClaim(c)
-	require.NoError(t, err, "SaveClaim failed")
-	err = s.SaveResult(r)
-	require.NoError(t, err, "SaveResult failed")
+	require.NoError(t, s.SaveResult(r), "SaveResult failed")
 
 	password := NewOutput(c, r, "password", []byte("mypassword"))
 	err = s.SaveOutput(password)
@@ -756,8 +805,12 @@ func TestStore_GetLastOutputs_OutputDefinitionRemoved(t *testing.T) {
 	foo, err := cp.ReadInstallation("foo")
 	require.NoError(t, err, "ReadInstallation failed")
 
+	claims, err := cp.ReadAllClaims(foo.Name)
+	require.NoError(t, err)
+	sort.Sort(Claims(claims))
+
 	// Remove output1 from the bundle definition
-	installClaim := foo.Claims[0]
+	installClaim := claims[0]
 	b := bundle.Bundle{
 		Definitions: map[string]*definition.Schema{
 			"output2": {
@@ -771,7 +824,7 @@ func TestStore_GetLastOutputs_OutputDefinitionRemoved(t *testing.T) {
 			},
 		},
 	}
-	upgradeClaim, err := installClaim.NewClaim(ActionUpgrade, b, nil)
+	upgradeClaim, err := installClaim.NewClaim(ActionUpgrade, b, "", "", nil)
 	require.NoError(t, err, "NewClaim failed")
 	err = cp.SaveClaim(upgradeClaim)
 	require.NoError(t, err, "SaveClaim failed")

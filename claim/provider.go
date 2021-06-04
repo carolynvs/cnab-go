@@ -14,12 +14,15 @@ type Provider interface {
 	// ListOutputs returns the names of outputs associated with a result that
 	// have been persisted. It is possible for results to have outputs that were
 	// generated but not persisted see
-	// https://github.com/cnabio/cnab-spec/blob/cnab-claim-1.0.0-DRAFT+b5ed2f3/400-claims.md#outputs
+	// https://github.com/cnabio/cnab-spec/blob/cnab-claim-1.0.0-DRAFT.1/400-claims.md#outputs
 	// for more information.
 	ListOutputs(resultID string) ([]string, error)
 
-	// ReadInstallation returns the specified Installation with all Claims and their Results loaded.
+	// ReadInstallation returns the specified Installation.
 	ReadInstallation(installation string) (Installation, error)
+
+	// ReadAllInstallations returns all installations, sorted by name in ascending order.
+	ReadAllInstallations() ([]Installation, error)
 
 	// ReadInstallationStatus returns the specified Installation with the last Claim and its last Result loaded.
 	ReadInstallationStatus(installation string) (Installation, error)
@@ -56,12 +59,17 @@ type Provider interface {
 	// ReadOutput returns the contents of the named output associated with the specified Result.
 	ReadOutput(claim Claim, result Result, outputName string) (Output, error)
 
+	// SaveInstallation persists the specified installation.
+	// Associated claims, must be persisted separately with SaveClaim.
+	SaveInstallation(installation Installation) error
+
 	// SaveClaim persists the specified claim.
 	// Associated results, Claim.Results, must be persisted separately with SaveResult.
 	SaveClaim(claim Claim) error
 
-	// SaveResult persists the specified result.
-	SaveResult(result Result) error
+	// SaveResult persists the specified result and updates the status on
+	// associated Installation when the action modified the installation.
+	SaveResult(r Result) error
 
 	// SaveOutput persists the output, encrypting the value if defined as
 	// sensitive (write-only) in the bundle.

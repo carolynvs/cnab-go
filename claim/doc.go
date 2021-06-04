@@ -1,14 +1,12 @@
 /*
-Package claim manages data associated with the Claim Spec
-https://github.com/cnabio/cnab-spec/blob/cnab-claim-1.0.0-DRAFT+b5ed2f3/400-claims.md
+Package claim manages data associated with the Installation State Spec
+https://github.com/cnabio/cnab-spec/pull/411
 
-There are three types of claim data: Claim, Result and Output. How they are
+There are four types of claim data: Installation, Claim, Result and Output. How they are
 stored is not dictated by the spec, however we have selected access patterns
 around the lowest common denominator (filesystem). Each implementation has
 metadata available that allow for optimizations, for example using queries based
-on a foreign key, if the underlying storage systems supports it. The claim data
-creates a hierarchy representing a fourth type of data that isn't stored but is
-represented in-memory: Installation.
+on a foreign key, if the underlying storage systems supports it.
 
 Below is the general layout of the data assuming the filesystem as the storage
 layer. Claims are grouped by the name of the installation, and keyed by the claim ID.
@@ -16,6 +14,8 @@ Results are grouped by the claim ID and keyed by the result ID. Outputs are grou
 by the result ID and are keyed by the "ResultID-OutputName" to generate a unique key.
 The groups allow for querying by storage systems that support it.
 
+installations/
+  INSTALLATION
 claims/
   INSTALLATION/
     CLAIM_ID
@@ -28,6 +28,8 @@ outputs/
 
 Example
 
+installations/
+  mysql.json
 claims/
   mysql/
     01EAZDEPCBPEEHQG9C4AF5X1PY.json (install)

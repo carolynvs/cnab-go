@@ -1073,13 +1073,22 @@ func TestSaveAction(t *testing.T) {
 		require.NoError(t, err, "SaveOperationResult failed")
 
 		_, err = cp.ReadClaim(c.ID)
-		assert.NoError(t, err, "the claim was not persisted")
+		require.NoError(t, err, "the claim was not persisted")
 
 		_, err = cp.ReadResult(r.ID)
-		assert.NoError(t, err, "the result was not persisted")
+		require.NoError(t, err, "the result was not persisted")
 
 		_, err = cp.ReadOutput(c, r, "some-output")
-		assert.NoError(t, err, "the output was not persisted")
+		require.NoError(t, err, "the output was not persisted")
+
+		i, err := cp.ReadInstallation(c.Installation)
+		require.NoError(t, err, "ReadInstallation failed")
+
+		assert.Equal(t, c.ID, i.Status.ClaimID, "unexpected claim id on the installation status")
+		assert.Equal(t, claim.ActionInstall, i.Status.Action, "unexpected claim id on the installation status")
+		assert.Equal(t, c.Revision, i.Status.Revision, "unexpected revision on the installation status")
+		assert.Equal(t, r.ID, i.Status.ResultID, "unexpected result id on the installation status")
+		assert.Equal(t, r.Status, i.Status.ResultStatus, "unexpected status text on the installation status")
 	})
 
 	t.Run("do not save output", func(t *testing.T) {

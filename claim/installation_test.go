@@ -3,29 +3,33 @@ package claim
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cnabio/cnab-go/labels"
 )
 
 func TestInstallation_GetInstallationTimestamp(t *testing.T) {
 	const installationName = "test"
-	upgrade, err := New(installationName, ActionUpgrade, exampleBundle, nil)
+	upgrade, err := New(installationName, ActionUpgrade, exampleBundle, exampleRef, exampleDigest, nil)
 	require.NoError(t, err)
-	install1, err := New(installationName, ActionInstall, exampleBundle, nil)
+	install1, err := New(installationName, ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 	require.NoError(t, err)
-	install2, err := New(installationName, ActionInstall, exampleBundle, nil)
+	install2, err := New(installationName, ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 	require.NoError(t, err)
 
 	t.Run("has claims", func(t *testing.T) {
-		i := NewInstallation(installationName, Claims{upgrade, install1, install2})
+		i := &Installation{Name: installationName}
+		i.LoadClaims(Claims{upgrade, install1, install2})
 
 		installTime, err := i.GetInstallationTimestamp()
 		require.NoError(t, err, "GetInstallationTimestamp failed")
 		assert.Equal(t, install1.Created, installTime, "invalid installation time")
 	})
 	t.Run("no claims", func(t *testing.T) {
-		i := NewInstallation(installationName, nil)
+		i := &Installation{Name: installationName}
 
 		_, err := i.GetInstallationTimestamp()
 		require.EqualError(t, err, "the installation test has no claims")
@@ -55,7 +59,8 @@ func TestInstallation_GetLastClaim(t *testing.T) {
 	}
 
 	t.Run("claim exists", func(t *testing.T) {
-		i := NewInstallation("wordpress", Claims{upgrade, install})
+		i := &Installation{Name: "wordpress"}
+		i.LoadClaims(Claims{upgrade, install})
 
 		c, err := i.GetLastClaim()
 
@@ -64,7 +69,7 @@ func TestInstallation_GetLastClaim(t *testing.T) {
 	})
 
 	t.Run("no claims", func(t *testing.T) {
-		i := NewInstallation("wordpress", nil)
+		i := &Installation{Name: "wordpress"}
 
 		c, err := i.GetLastClaim()
 
@@ -102,7 +107,8 @@ func TestInstallation_GetLastResult(t *testing.T) {
 	}
 
 	t.Run("result exists", func(t *testing.T) {
-		i := NewInstallation("wordpress", Claims{upgrade, install})
+		i := &Installation{Name: "wordpress"}
+		i.LoadClaims(Claims{upgrade, install})
 
 		r, err := i.GetLastResult()
 
@@ -112,7 +118,7 @@ func TestInstallation_GetLastResult(t *testing.T) {
 	})
 
 	t.Run("no claims", func(t *testing.T) {
-		i := NewInstallation("wordpress", nil)
+		i := &Installation{Name: "wordpress"}
 
 		r, err := i.GetLastResult()
 
@@ -122,7 +128,8 @@ func TestInstallation_GetLastResult(t *testing.T) {
 	})
 
 	t.Run("no results", func(t *testing.T) {
-		i := NewInstallation("wordpress", Claims{Claim{ID: "1", results: &Results{}}})
+		i := &Installation{Name: "wordpress"}
+		i.LoadClaims(Claims{Claim{ID: "1", results: &Results{}}})
 
 		r, err := i.GetLastResult()
 
@@ -132,7 +139,8 @@ func TestInstallation_GetLastResult(t *testing.T) {
 	})
 
 	t.Run("no results loaded", func(t *testing.T) {
-		i := NewInstallation("wordpress", Claims{Claim{ID: "1"}})
+		i := &Installation{Name: "wordpress"}
+		i.LoadClaims(Claims{Claim{ID: "1"}})
 
 		r, err := i.GetLastResult()
 
@@ -140,6 +148,29 @@ func TestInstallation_GetLastResult(t *testing.T) {
 		assert.Equal(t, Result{}, r, "should return an empty result when one cannot be found")
 		assert.Equal(t, StatusUnknown, i.GetLastStatus(), "GetLastStatus did not return the expected value")
 	})
+}
+
+func TestInstallation_GetStatus(t *testing.T) {
+	i := Installation{Status: InstallationStatus{ResultStatus: StatusSucceeded}}
+	assert.Equal(t, StatusSucceeded, i.GetStatus())
+
+	i = Installation{}
+	assert.Equal(t, StatusUnknown, i.GetStatus())
+}
+
+func TestInstallation_GetAppAndVersion(t *testing.T) {
+	i := Installation{
+		Labels: map[string]string{
+			labels.App:        "mysql",
+			labels.AppVersion: "5.7",
+		},
+	}
+	assert.Equal(t, "mysql", i.GetApp())
+	assert.Equal(t, "5.7", i.GetAppVersion())
+
+	i = Installation{}
+	assert.Empty(t, i.GetApp())
+	assert.Empty(t, i.GetAppVersion())
 }
 
 func TestInstallationByName_Sort(t *testing.T) {
@@ -157,18 +188,12 @@ func TestInstallationByName_Sort(t *testing.T) {
 }
 
 func TestInstallationByModified_Sort(t *testing.T) {
-	cid1 := MustNewULID()
-	cid2 := MustNewULID()
-	cid3 := MustNewULID()
-	cid4 := MustNewULID()
-
 	installations := InstallationByModified{
-		{Name: "c", Claims: []Claim{{ID: cid4}, {ID: cid2}}}, // require a sort for this to end up last (cid4 is the "oldest" timestamp)
-		{Name: "a", Claims: []Claim{{ID: cid1}}},
-		{Name: "b", Claims: []Claim{{ID: cid3}}},
+		{Name: "c", Modified: time.Now().Add(2 * time.Hour)}, // require a sort for this to end up last (cid4 is the "oldest" timestamp)
+		{Name: "a", Modified: time.Now()},
+		{Name: "b", Modified: time.Now().Add(time.Hour)},
 	}
 
-	installations.SortClaims()
 	sort.Sort(installations)
 
 	assert.Equal(t, "a", installations[0].Name)

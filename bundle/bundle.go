@@ -38,6 +38,7 @@ type Bundle struct {
 	Definitions        definition.Definitions `json:"definitions,omitempty" yaml:"definitions,omitempty"`
 	License            string                 `json:"license,omitempty" yaml:"license,omitempty"`
 	RequiredExtensions []string               `json:"requiredExtensions,omitempty" yaml:"requiredExtensions,omitempty"`
+	Labels             map[string]string      `json:"labels,omitempty" yaml:"labels,omitempty"`
 
 	// Custom extension metadata is a named collection of auxiliary data whose
 	// meaning is defined outside of the CNAB specification.

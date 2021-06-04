@@ -17,8 +17,8 @@ import (
 
 // CNABSpecVersion represents the CNAB Spec version of the Claim
 // that this library implements
-// This value is prefixed with e.g. `cnab-claim-` so isn't itself valid semver.
-var CNABSpecVersion string = "cnab-claim-1.0.0-DRAFT+b5ed2f3"
+// This value is prefixed with e.g. `cnab-installation-` so isn't itself valid semver.
+var CNABSpecVersion string = "cnab-installation-1.0.0-DRAFT.1"
 
 // Status constants define the CNAB status fields on a Result.
 const (
@@ -93,6 +93,9 @@ type Claim struct {
 	// BundleReference is the canonical reference to the bundle used in the action.
 	BundleReference string `json:"bundleReference,omitempty"`
 
+	// BundleDigest is the digest of the bundle.
+	BundleDigest string `json:"bundleDigest"`
+
 	// Parameters are the key/value pairs that were passed in during the operation.
 	Parameters map[string]interface{} `json:"parameters,omitempty"`
 
@@ -119,7 +122,7 @@ func GetDefaultSchemaVersion() (schema.Version, error) {
 var ValidName = regexp.MustCompile("^[a-zA-Z0-9._-]+$")
 
 // New creates a new Claim initialized for an operation.
-func New(installation string, action string, bun bundle.Bundle, parameters map[string]interface{}) (Claim, error) {
+func New(installation string, action string, bun bundle.Bundle, bundleReference string, bundleDigest string, parameters map[string]interface{}) (Claim, error) {
 	if !ValidName.MatchString(installation) {
 		return Claim{}, fmt.Errorf("invalid installation name %q. Names must be [a-zA-Z0-9-_]+", installation)
 	}
@@ -140,21 +143,25 @@ func New(installation string, action string, bun bundle.Bundle, parameters map[s
 	}
 
 	return Claim{
-		SchemaVersion: schemaVersion,
-		ID:            id,
-		Installation:  installation,
-		Revision:      revision,
-		Created:       now,
-		Action:        action,
-		Bundle:        bun,
-		Parameters:    parameters,
+		SchemaVersion:   schemaVersion,
+		ID:              id,
+		BundleReference: bundleReference,
+		BundleDigest:    bundleDigest,
+		Installation:    installation,
+		Revision:        revision,
+		Created:         now,
+		Action:          action,
+		Bundle:          bun,
+		Parameters:      parameters,
 	}, nil
 }
 
 // NewClaim is a convenience for creating a new claim from an existing claim.
-func (c Claim) NewClaim(action string, bun bundle.Bundle, parameters map[string]interface{}) (Claim, error) {
+func (c Claim) NewClaim(action string, bun bundle.Bundle, bundleReference string, bundleDigest string, parameters map[string]interface{}) (Claim, error) {
 	updatedClaim := c
 	updatedClaim.Bundle = bun
+	updatedClaim.BundleReference = bundleReference
+	updatedClaim.BundleDigest = bundleDigest
 	updatedClaim.Action = action
 	updatedClaim.Parameters = parameters
 	updatedClaim.Created = time.Now()

@@ -57,8 +57,24 @@ func Example_install() {
 	// Pass an empty set of parameters
 	var parameters map[string]interface{}
 
+	// Create the installation record
+	const (
+		namespace       = ""
+		bundleRepo      = "example.com/myorg/mybuns"
+		bundleReference = bundleRepo + "v1.0.0"
+		bundleDigest    = "sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+	)
+	i, err := claim.NewInstallation(namespace, "hello", b, bundleReference, bundleDigest)
+	if err != nil {
+		panic(err)
+	}
+	err = cp.SaveInstallation(i)
+	if err != nil {
+		panic(err)
+	}
+
 	// Create a claim representing the inputs to the install operation
-	c, err := claim.New("hello", claim.ActionInstall, b, parameters)
+	c, err := claim.New(i.Name, claim.ActionInstall, b, bundleReference, bundleDigest, parameters)
 	if err != nil {
 		panic(err)
 	}
@@ -95,14 +111,14 @@ func Example_install() {
 	//     "CNAB_ACTION": "install",
 	//     "CNAB_BUNDLE_NAME": "mybuns",
 	//     "CNAB_BUNDLE_VERSION": "1.0.0",
-	//     "CNAB_CLAIMS_VERSION": "1.0.0-DRAFT+b5ed2f3",
+	//     "CNAB_CLAIMS_VERSION": "1.0.0-DRAFT.1",
 	//     "CNAB_INSTALLATION_NAME": "hello",
 	//     "CNAB_REVISION": "claim-rev"
 	//   },
 	//   "files": {
 	//     "/cnab/app/image-map.json": "{}",
 	//     "/cnab/bundle.json": "{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}}",
-	//     "/cnab/claim.json": "{\"schemaVersion\":\"1.0.0-DRAFT+b5ed2f3\",\"id\":\"claim-id\",\"installation\":\"hello\",\"revision\":\"claim-rev\",\"created\":\"2020-04-18T01:02:03.000000004Z\",\"action\":\"install\",\"bundle\":{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}}}"
+	//     "/cnab/claim.json": "{\"schemaVersion\":\"1.0.0-DRAFT.1\",\"id\":\"claim-id\",\"installation\":\"hello\",\"revision\":\"claim-rev\",\"created\":\"2020-04-18T01:02:03.000000004Z\",\"action\":\"install\",\"bundle\":{\"schemaVersion\":\"1.2.0\",\"name\":\"mybuns\",\"version\":\"1.0.0\",\"description\":\"\",\"invocationImages\":[{\"imageType\":\"docker\",\"image\":\"example.com/myorg/myinstaller\",\"contentDigest\":\"sha256:7cc0618539fe11e801ce68911a0c9441a3dfaa9ba63057526c4016cf9db19474\"}],\"actions\":{\"logs\":{}}},\"bundleReference\":\"example.com/myorg/mybunsv1.0.0\",\"bundleDigest\":\"sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae\"}"
 	//   },
 	//   "outputs": {},
 	//   "Bundle": {

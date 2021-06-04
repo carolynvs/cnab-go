@@ -18,7 +18,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	claim, err := New("my_claim", ActionInstall, exampleBundle, nil)
+	claim, err := New("my_claim", ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, claim.ID)
@@ -32,21 +32,21 @@ func TestNew(t *testing.T) {
 
 func TestClaim_Validate(t *testing.T) {
 	t.Run("builtin action", func(t *testing.T) {
-		c, err := New("test", ActionInstall, exampleBundle, nil)
+		c, err := New("test", ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 		err = c.Validate()
 		require.NoError(t, err, "Validate failed")
 	})
 
 	t.Run("custom action", func(t *testing.T) {
-		c, err := New("test", "logs", exampleBundle, nil)
+		c, err := New("test", "logs", exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 		err = c.Validate()
 		require.NoError(t, err, "Validate failed")
 	})
 
 	t.Run("missing id", func(t *testing.T) {
-		c, err := New("test", ActionInstall, exampleBundle, nil)
+		c, err := New("test", ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 
 		c.ID = ""
@@ -56,7 +56,7 @@ func TestClaim_Validate(t *testing.T) {
 	})
 
 	t.Run("missing revision", func(t *testing.T) {
-		c, err := New("test", ActionInstall, exampleBundle, nil)
+		c, err := New("test", ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 
 		c.Revision = ""
@@ -66,7 +66,7 @@ func TestClaim_Validate(t *testing.T) {
 	})
 
 	t.Run("missing installation", func(t *testing.T) {
-		c, err := New("test", ActionInstall, exampleBundle, nil)
+		c, err := New("test", ActionInstall, exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 
 		c.Installation = ""
@@ -76,7 +76,7 @@ func TestClaim_Validate(t *testing.T) {
 	})
 
 	t.Run("missing action", func(t *testing.T) {
-		c, err := New("test", "", exampleBundle, nil)
+		c, err := New("test", "", exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 
 		err = c.Validate()
@@ -84,7 +84,7 @@ func TestClaim_Validate(t *testing.T) {
 	})
 
 	t.Run("invalid action", func(t *testing.T) {
-		c, err := New("test", "missing", exampleBundle, nil)
+		c, err := New("test", "missing", exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "New failed")
 
 		err = c.Validate()
@@ -93,11 +93,11 @@ func TestClaim_Validate(t *testing.T) {
 }
 
 func TestClaim_NewClaim(t *testing.T) {
-	existingClaim, err := New("claim", ActionUnknown, exampleBundle, nil)
+	existingClaim, err := New("claim", ActionUnknown, exampleBundle, exampleRef, exampleDigest, nil)
 	assert.NoError(t, err)
 
 	t.Run("modifying action", func(t *testing.T) {
-		updatedClaim, err := existingClaim.NewClaim("test", exampleBundle, nil)
+		updatedClaim, err := existingClaim.NewClaim("test", exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "NewClaim failed")
 
 		is := assert.New(t)
@@ -107,7 +107,7 @@ func TestClaim_NewClaim(t *testing.T) {
 	})
 
 	t.Run("non-modifying action", func(t *testing.T) {
-		updatedClaim, err := existingClaim.NewClaim("logs", exampleBundle, nil)
+		updatedClaim, err := existingClaim.NewClaim("logs", exampleBundle, exampleRef, exampleDigest, nil)
 		require.NoError(t, err, "NewClaim failed")
 
 		is := assert.New(t)
@@ -143,6 +143,8 @@ var (
 	staticID       = "id"
 	staticRevision = "revision"
 	staticDate     = time.Date(1983, time.April, 18, 1, 2, 3, 4, time.UTC)
+	exampleRef     = "example.com/mybun"
+	exampleDigest  = "sha256:abc123"
 	exampleBundle  = bundle.Bundle{
 		SchemaVersion:    "schemaVersion",
 		Name:             "mybun",
@@ -157,7 +159,7 @@ var (
 )
 
 func TestMarshal_New(t *testing.T) {
-	claim, err := New("my_claim", ActionUnknown, bundle.Bundle{}, nil)
+	claim, err := New("my_claim", ActionUnknown, bundle.Bundle{}, exampleRef, exampleDigest, nil)
 	assert.NoError(t, err)
 
 	// override dynamic fields for testing
@@ -176,14 +178,23 @@ func TestMarshal_New(t *testing.T) {
 }
 
 var schemaVersion, _ = GetDefaultSchemaVersion()
+var exampleInstallation = Installation{
+	SchemaVersion:    schemaVersion,
+	Name:             "myapp",
+	Namespace:        "",
+	BundleRepository: "example.com/myapp",
+	BundleVersion:    "0.1.0",
+	BundleDigest:     "sha256:abc123",
+}
 var exampleClaim = Claim{
 	SchemaVersion:   schemaVersion,
 	ID:              staticID,
-	Installation:    "my_claim",
+	Installation:    exampleInstallation.Name,
 	Revision:        staticRevision,
 	Created:         staticDate,
 	Bundle:          exampleBundle,
 	BundleReference: "example.com/mybundle@sha256:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+	BundleDigest:    "sha256:55f83710272990efab4e076f9281453e136980becfd879640b06552ead751284",
 	Action:          ActionInstall,
 	Parameters: map[string]interface{}{
 		"myparam": "myparamvalue",
