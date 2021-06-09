@@ -1,6 +1,7 @@
 package claim
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
+
+	"github.com/cnabio/cnab-go/storage"
 
 	"github.com/cnabio/cnab-go/bundle"
 	"github.com/cnabio/cnab-go/schema"
@@ -60,7 +63,11 @@ const (
 )
 
 var (
-	builtinActions = map[string]struct{}{"install": {}, "uninstall": {}, "upgrade": {}}
+	builtinActions = map[string]struct{}{
+		"install":   {},
+		"uninstall": {},
+		"upgrade":   {}}
+	_ storage.Document = Claim{}
 )
 
 // Claim is an installation claim receipt.
@@ -74,6 +81,9 @@ type Claim struct {
 
 	// Id of the claim.
 	ID string `json:"id"`
+
+	// Namespace of the installation.
+	Namespace string `json:"namespace"`
 
 	// Installation name.
 	Installation string `json:"installation"`
@@ -186,6 +196,30 @@ func (c Claim) NewClaim(action string, bun bundle.Bundle, bundleReference string
 	}
 
 	return updatedClaim, nil
+}
+
+func (c Claim) GetGroup() string {
+	return c.Installation
+}
+
+func (c Claim) GetNamespace() string {
+	return c.Namespace
+}
+
+func (c Claim) GetName() string {
+	return c.ID
+}
+
+func (c Claim) GetType() string {
+	return ItemTypeClaims
+}
+
+func (c Claim) ShouldEncrypt() bool {
+	return true
+}
+
+func (c Claim) GetData() ([]byte, error) {
+	return json.MarshalIndent(c, "", "  ")
 }
 
 // IsModifyingAction determines if the Claim's action modifies the bundle.

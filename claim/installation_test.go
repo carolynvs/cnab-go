@@ -8,7 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cnabio/cnab-go/labels"
+	"github.com/cnabio/cnab-go/bundle"
+	"github.com/cnabio/cnab-go/storage"
 )
 
 func TestInstallation_GetInstallationTimestamp(t *testing.T) {
@@ -33,6 +34,41 @@ func TestInstallation_GetInstallationTimestamp(t *testing.T) {
 
 		_, err := i.GetInstallationTimestamp()
 		require.EqualError(t, err, "the installation test has no claims")
+	})
+}
+
+func TestNewInstallation(t *testing.T) {
+	t.Run("invalid name", func(t *testing.T) {
+		_, err := NewInstallation("", "malformed malort", bundle.Bundle{}, "", "")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid installation name 'malformed malort'")
+	})
+
+	t.Run("invalid bundle reference", func(t *testing.T) {
+		_, err := NewInstallation("", "myapp", bundle.Bundle{}, "invalid reference", "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid bundle reference")
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		b := bundle.Bundle{
+			Version: "0.1.0",
+			Labels: map[string]string{
+				storage.LabelApp:        "myapp",
+				storage.LabelAppVersion: "0.1.1-beta.1",
+				"env":                   "dev",
+			}}
+		i, err := NewInstallation("myns", "myapp", b, "me/mybun:v0.1.0", "sha256:abc123")
+		require.NoError(t, err)
+		assert.Equal(t, "myapp", i.Name, "incorrect name")
+		assert.Equal(t, "myns", i.Namespace, "incorrect namespace")
+		assert.Equal(t, "me/mybun", i.BundleRepository, "incorrect bundle repository")
+		assert.Equal(t, "0.1.0", i.BundleVersion, "incorrect bundle version")
+		assert.Equal(t, "sha256:abc123", i.BundleDigest, "incorrect bundle digest")
+		assert.NotEmpty(t, i.Created, "incorrect created timestamp")
+		assert.Equal(t, i.Created, i.Modified, "incorrect modified timestamp")
+		assert.Equal(t, b.Labels, i.Labels, "incorrect labels")
+		assert.NotEmpty(t, i.SchemaVersion, "missing schema version")
 	})
 }
 
@@ -161,8 +197,8 @@ func TestInstallation_GetStatus(t *testing.T) {
 func TestInstallation_GetAppAndVersion(t *testing.T) {
 	i := Installation{
 		Labels: map[string]string{
-			labels.App:        "mysql",
-			labels.AppVersion: "5.7",
+			storage.LabelApp:        "mysql",
+			storage.LabelAppVersion: "5.7",
 		},
 	}
 	assert.Equal(t, "mysql", i.GetApp())

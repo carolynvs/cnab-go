@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cnabio/cnab-go/storage"
 	"github.com/cnabio/cnab-go/utils/crud"
 )
 
@@ -43,19 +44,19 @@ var _ Provider = &Store{}
 type Store struct {
 	lock         sync.Mutex
 	backingStore crud.ManagedStore
-	encrypt      EncryptionHandler
-	decrypt      EncryptionHandler
+	encrypt      storage.EncryptionHandler
+	decrypt      storage.EncryptionHandler
 }
 
 // NewClaimStore creates a persistent store for claims using the specified
 // backing datastore.
-func NewClaimStore(store crud.ManagedStore, encrypt EncryptionHandler, decrypt EncryptionHandler) Store {
+func NewClaimStore(store crud.ManagedStore, encrypt storage.EncryptionHandler, decrypt storage.EncryptionHandler) Store {
 	if encrypt == nil {
-		encrypt = noOpEncryptionHandler
+		encrypt = storage.NoOpEncryptionHandler
 	}
 
 	if decrypt == nil {
-		decrypt = noOpEncryptionHandler
+		decrypt = storage.NoOpEncryptionHandler
 	}
 
 	return Store{
@@ -77,21 +78,17 @@ func NewClaimStoreFileExtensions() map[string]string {
 	}
 }
 
-// EncryptionHandler is a function that transforms data by encrypting or decrypting it.
-type EncryptionHandler func([]byte) ([]byte, error)
-
-// noOpEncryptHandler is used when no handler is specified.
-var noOpEncryptionHandler = func(data []byte) ([]byte, error) {
-	return data, nil
-}
-
 // GetBackingStore returns the data store behind this claim store.
 func (s Store) GetBackingStore() crud.ManagedStore {
 	return s.backingStore
 }
 
-func (s Store) ListInstallations() ([]string, error) {
-	names, err := s.backingStore.List(ItemTypeInstallations, "")
+func (s Store) ListInstallations(namespace string) ([]string, error) {
+	if namespace == "" {
+		namespace = storage.NamespaceGlobal
+	}
+
+	names, err := s.backingStore.List(ItemTypeInstallations, namespace)
 	sort.Strings(names)
 	return names, err
 }
@@ -140,8 +137,8 @@ func (s Store) ListOutputs(resultID string) ([]string, error) {
 	return outputNames, nil
 }
 
-func (s Store) ReadInstallation(name string) (Installation, error) {
-	bytes, err := s.backingStore.Read(ItemTypeInstallations, name)
+func (s Store) ReadInstallation(namespace string, name string) (Installation, error) {
+	bytes, err := s.backingStore.Read(ItemTypeInstallations, InstallationKey(namespace, name))
 	if err != nil {
 		return Installation{}, s.handleNotExistsError(err, ErrInstallationNotFound)
 	}
@@ -225,7 +222,7 @@ func (s Store) ReadAllInstallationStatus() ([]Installation, error) {
 		return nil, err
 	}
 
-	names, err := s.ListInstallations()
+	names, err := s.ListInstallations("")
 	if err != nil {
 		return nil, err
 	}
@@ -476,12 +473,7 @@ func (s Store) ReadOutput(c Claim, r Result, outputName string) (Output, error) 
 }
 
 func (s Store) SaveInstallation(i Installation) error {
-	bytes, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return s.backingStore.Save(ItemTypeInstallations, "", i.Name, bytes)
+	return crud.SaveDocument(s.backingStore, i, s.encrypt)
 }
 
 func (s Store) SaveClaim(c Claim) error {
@@ -491,17 +483,7 @@ func (s Store) SaveClaim(c Claim) error {
 		return err
 	}
 
-	bytes, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	bytes, err = s.encrypt(bytes)
-	if err != nil {
-		return errors.Wrapf(err, "error encrypting claim %s of installation %s", c.ID, c.Installation)
-	}
-
-	err = s.backingStore.Save(ItemTypeClaims, c.Installation, c.ID, bytes)
+	err = crud.SaveDocument(s.backingStore, c, s.encrypt)
 	if err != nil {
 		return err
 	}
@@ -511,7 +493,7 @@ func (s Store) SaveClaim(c Claim) error {
 	if modifies, _ := c.IsModifyingAction(); modifies {
 		s.lock.Lock()
 		defer s.lock.Unlock()
-		i, err := s.ReadInstallation(c.Installation)
+		i, err := s.ReadInstallation("", c.Installation)
 		if err != nil {
 			return err
 		}
@@ -525,12 +507,13 @@ func (s Store) SaveClaim(c Claim) error {
 
 // SaveResult saves the specified Result and updates the status of the Installation.
 func (s Store) SaveResult(r Result) error {
-	bytes, err := json.MarshalIndent(r, "", "  ")
+	handleClose, err := s.backingStore.HandleConnect()
+	defer handleClose()
 	if err != nil {
 		return err
 	}
 
-	err = s.backingStore.Save(ItemTypeResults, r.ClaimID, r.ID, bytes)
+	err = crud.SaveDocument(s.backingStore, r, s.encrypt)
 	if err != nil {
 		return err
 	}
@@ -541,7 +524,7 @@ func (s Store) SaveResult(r Result) error {
 		if modifies, _ := r.claim.IsModifyingAction(); modifies {
 			s.lock.Lock()
 			defer s.lock.Unlock()
-			i, err := s.ReadInstallation(r.claim.Installation)
+			i, err := s.ReadInstallation("", r.claim.Installation)
 			if err != nil {
 				return err
 			}
@@ -572,7 +555,7 @@ func (s Store) SaveOutput(o Output) error {
 		}
 	}
 
-	return s.backingStore.Save(ItemTypeOutputs, o.result.ID, s.outputKey(o.result.ID, o.Name), data)
+	return s.backingStore.Save(ItemTypeOutputs, o.GetGroup(), s.outputKey(o.result.ID, o.Name), data)
 }
 
 func (s Store) DeleteInstallation(installation string) error {

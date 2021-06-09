@@ -1,6 +1,7 @@
 package claim
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -9,9 +10,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cnabio/cnab-go/bundle"
-	"github.com/cnabio/cnab-go/labels"
 	"github.com/cnabio/cnab-go/schema"
+	"github.com/cnabio/cnab-go/storage"
 )
+
+var _ storage.Document = Installation{}
 
 // Installation represents the installation of a bundle.
 type Installation struct {
@@ -81,13 +84,17 @@ func NewInstallation(namespace string, name string, bundle bundle.Bundle, bundle
 
 	now := time.Now()
 
+	if namespace == "" {
+		namespace = "(global)"
+	}
+
 	var repo string
 	if bundleRef != "" {
 		ref, err := reference.ParseNormalizedNamed(bundleRef)
 		if err != nil {
 			return Installation{}, errors.Wrapf(err, "invalid bundle reference '%s'", bundleRef)
 		}
-		repo = ref.Name()
+		repo = reference.FamiliarName(ref)
 	}
 
 	labels := make(map[string]string, len(bundle.Labels))
@@ -104,11 +111,12 @@ func NewInstallation(namespace string, name string, bundle bundle.Bundle, bundle
 		BundleRepository: repo,
 		BundleVersion:    bundle.Version,
 		BundleDigest:     bundleDigest,
+		Labels:           labels,
 	}, nil
 }
 
-// NewInstallation creates an Installation and ensures the contained data is sorted.
-func (i *Installation) LoadClaims(claims []Claim) {
+// LoadClaims sets and sorts the claims on an installation.
+func (i *Installation) LoadClaims(claims []Claim) Installation {
 	i.claims = claims
 	sort.Sort(i.claims)
 	for _, c := range i.claims {
@@ -116,16 +124,45 @@ func (i *Installation) LoadClaims(claims []Claim) {
 			sort.Sort(c.results)
 		}
 	}
+	return *i
+}
+
+// GetGroup under which the installation should be stored.
+func (i Installation) GetGroup() string {
+	if i.Namespace == "" {
+		return storage.NamespaceGlobal
+	}
+	return i.Namespace
+}
+
+func (i Installation) GetNamespace() string {
+	return i.Namespace
+}
+
+func (i Installation) GetName() string {
+	return i.Name
+}
+
+func (i Installation) GetType() string {
+	return ItemTypeInstallations
+}
+
+func (i Installation) ShouldEncrypt() bool {
+	return true
+}
+
+func (i Installation) GetData() ([]byte, error) {
+	return json.MarshalIndent(i, "", "  ")
 }
 
 // GetApp returns the name of the application represented by the bundle, if defined.
 func (i Installation) GetApp() string {
-	return i.Labels[labels.App]
+	return i.Labels[storage.LabelApp]
 }
 
 // GetAppVersion returns the version of the application represented by the bundle, if defined.
 func (i Installation) GetAppVersion() string {
-	return i.Labels[labels.AppVersion]
+	return i.Labels[storage.LabelAppVersion]
 }
 
 // GetInstallationTimestamp searches the claims associated with the installation
@@ -205,7 +242,7 @@ func (i Installation) ApplyClaim(c Claim) Installation {
 	i.BundleVersion = c.Bundle.Version
 	i.BundleDigest = c.BundleDigest
 	if ref, err := reference.ParseNormalizedNamed(c.BundleReference); err == nil {
-		i.BundleRepository = ref.Name()
+		i.BundleRepository = reference.FamiliarName(ref)
 	}
 
 	if i.Labels == nil {

@@ -1081,7 +1081,7 @@ func TestSaveAction(t *testing.T) {
 		_, err = cp.ReadOutput(c, r, "some-output")
 		require.NoError(t, err, "the output was not persisted")
 
-		i, err := cp.ReadInstallation(c.Installation)
+		i, err := cp.ReadInstallation("", c.Installation)
 		require.NoError(t, err, "ReadInstallation failed")
 
 		assert.Equal(t, c.ID, i.Status.ClaimID, "unexpected claim id on the installation status")

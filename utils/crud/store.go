@@ -1,5 +1,11 @@
 package crud
 
+import (
+	"github.com/pkg/errors"
+
+	"github.com/cnabio/cnab-go/storage"
+)
+
 // Store is a simplified interface to a key-blob store supporting CRUD operations.
 type Store interface {
 	// Count the number of items of the optional type and group.
@@ -47,4 +53,20 @@ type HasConnect interface {
 // method before the interface's methods are called.
 type HasClose interface {
 	Close() error
+}
+
+func SaveDocument(store Store, doc storage.Document, encrypt storage.EncryptionHandler) error {
+	data, err := doc.GetData()
+	if err != nil {
+		return err
+	}
+
+	if encrypt != nil {
+		data, err = encrypt(data)
+		if err != nil {
+			return errors.Wrapf(err, "could not encrypt document %s", doc.GetName())
+		}
+	}
+
+	return store.Save(doc.GetType(), doc.GetGroup(), doc.GetName(), data)
 }

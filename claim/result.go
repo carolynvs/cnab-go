@@ -1,17 +1,25 @@
 package claim
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
+
+	"github.com/cnabio/cnab-go/storage"
 )
+
+var _ storage.Document = Result{}
 
 // Result tracks the result of an operation on a CNAB installation
 type Result struct {
 	// Id of the result.
 	ID string `json:"id"`
+
+	// Namespace of the installation.
+	Namespace string `json:"namespace"`
 
 	// ClaimId associated with the claim that generated the result.
 	ClaimID string `json:"claimId"`
@@ -54,6 +62,30 @@ func NewResult(c Claim, status string) (Result, error) {
 		Status:         status,
 		OutputMetadata: OutputMetadata{},
 	}, nil
+}
+
+func (r Result) GetGroup() string {
+	return r.ClaimID
+}
+
+func (r Result) GetNamespace() string {
+	return r.ID
+}
+
+func (r Result) GetName() string {
+	return r.ID
+}
+
+func (r Result) GetType() string {
+	return ItemTypeResults
+}
+
+func (r Result) ShouldEncrypt() bool {
+	return false
+}
+
+func (r Result) GetData() ([]byte, error) {
+	return json.MarshalIndent(r, "", "  ")
 }
 
 // Validate the Result

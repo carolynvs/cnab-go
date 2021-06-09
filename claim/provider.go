@@ -3,7 +3,7 @@ package claim
 // Provider interface for claim data.
 type Provider interface {
 	// ListInstallations returns Installation names sorted in ascending order.
-	ListInstallations() ([]string, error)
+	ListInstallations(namespace string) ([]string, error)
 
 	// ListClaims returns Claim IDs associated with an Installation sorted in ascending order.
 	ListClaims(installation string) ([]string, error)
@@ -19,7 +19,7 @@ type Provider interface {
 	ListOutputs(resultID string) ([]string, error)
 
 	// ReadInstallation returns the specified Installation.
-	ReadInstallation(installation string) (Installation, error)
+	ReadInstallation(namespace string, name string) (Installation, error)
 
 	// ReadAllInstallations returns all installations, sorted by name in ascending order.
 	ReadAllInstallations() ([]Installation, error)

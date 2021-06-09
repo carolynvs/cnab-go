@@ -173,7 +173,7 @@ func (a Action) SaveInitialClaim(c claim.Claim, status string) error {
 		return errors.New("the action claims provider is not set")
 	}
 
-	if _, err := a.Claims.ReadInstallation(c.Installation); err != nil && strings.Contains(err.Error(), claim.ErrInstallationNotFound.Error()) {
+	if _, err := a.Claims.ReadInstallation("", c.Installation); err != nil && strings.Contains(err.Error(), claim.ErrInstallationNotFound.Error()) {
 		i, err := claim.NewInstallation("", c.Installation, c.Bundle, c.BundleReference, c.BundleDigest)
 		if err != nil {
 			return err

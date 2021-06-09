@@ -34,6 +34,8 @@ var b64decode = func(src []byte) ([]byte, error) {
 // generateClaimData creates test claims, results and outputs
 // it returns a claim Provider, and a test cleanup function.
 //
+// installations/
+//   foo
 // claims/
 //   foo/
 //     CLAIM_ID_1 (install)
@@ -93,8 +95,8 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 		},
 	}
 
-	createInstallation := func(installation string) Installation {
-		i, err := NewInstallation("", installation, bun, "example.com/mybun", "sha256:abc123")
+	createInstallation := func(namespace, name string) Installation {
+		i, err := NewInstallation(namespace, name, bun, "example.com/mybun", "sha256:abc123")
 		require.NoError(t, err, "NewInstallation failed")
 		require.NoError(t, cp.SaveInstallation(i), "SaveInstallation failed")
 		return i
@@ -130,7 +132,7 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 	}
 
 	// Create the foo installation data
-	i := createInstallation("foo")
+	i := createInstallation("", "foo")
 	c := createClaim(i.Name, ActionInstall)
 	r := createResult(c, StatusSucceeded)
 	createOutput(c, r, "output1")
@@ -155,13 +157,13 @@ func generateClaimData(t *testing.T) (Provider, crud.MockStore) {
 	require.NoError(t, cp.SaveInstallation(i))
 
 	// Create the bar installation data
-	i = createInstallation("bar")
+	i = createInstallation("", "bar")
 	c = createClaim(i.Name, ActionInstall)
 	createResult(c, StatusRunning)
 	createResult(c, StatusSucceeded)
 
 	// Create the baz installation data
-	i = createInstallation("baz")
+	i = createInstallation("dev", "baz")
 	c = createClaim(i.Name, ActionInstall)
 	createResult(c, StatusFailed)
 
@@ -204,14 +206,14 @@ func TestCanSaveReadAndDelete(t *testing.T) {
 	store.SaveInstallation(i)
 	err = store.SaveClaim(c1)
 	must.NoError(err, "SaveClaim failed")
-	_, err = datastore.Read(ItemTypeInstallations, c1.Installation)
+	_, err = store.ReadInstallation("", i.Name)
 	must.NoError(err, "A file representing the installation should have been created")
 
 	c2, err := store.ReadLastClaim("foo")
 	must.NoError(err, "ReadLastClaim failed")
 	is.Equal(c2.Bundle, c1.Bundle, "Expected to read back bundle %s, got %s", c1.Bundle.Name, c2.Bundle.Name)
 
-	installations, err := store.ListInstallations()
+	installations, err := store.ListInstallations("")
 	must.NoError(err, "ListInstallations failed")
 	is.Len(installations, 1)
 	is.Equal(installations[0], c1.Installation)
@@ -221,7 +223,7 @@ func TestCanSaveReadAndDelete(t *testing.T) {
 	_, err = store.ReadClaim(c2.ID)
 	is.Error(err, "Claims associated with the installation should have been deleted")
 
-	installations, err = store.ListInstallations()
+	installations, err = store.ListInstallations("")
 	must.NoError(err, "ListInstallations failed")
 	is.Empty(installations, "The installation should have been deleted")
 
@@ -270,7 +272,29 @@ func TestClaimStore_Installations(t *testing.T) {
 
 	t.Run("ListInstallations", func(t *testing.T) {
 		datastore.ResetCounts()
-		installations, err := cp.ListInstallations()
+		installations, err := cp.ListInstallations("")
+		require.NoError(t, err, "ListInstallations failed")
+
+		require.Len(t, installations, 2, "Expected 2 installations")
+		assert.Equal(t, []string{"bar", "foo"}, installations)
+
+		assertSingleConnection(t, datastore)
+	})
+
+	t.Run("ListInstallations by Namespace", func(t *testing.T) {
+
+		installations, err := cp.ListInstallations("dev")
+		require.NoError(t, err, "ListInstallations failed")
+
+		require.Len(t, installations, 1, "Expected 1 installation")
+		assert.Equal(t, []string{"baz"}, installations)
+
+		assertSingleConnection(t, datastore)
+	})
+
+	t.Run("ListInstallations in All Namespaces", func(t *testing.T) {
+
+		installations, err := cp.ListInstallations("*")
 		require.NoError(t, err, "ListInstallations failed")
 
 		require.Len(t, installations, 3, "Expected 3 installations")
@@ -321,7 +345,7 @@ func TestClaimStore_Installations(t *testing.T) {
 
 	t.Run("ReadInstallation", func(t *testing.T) {
 		datastore.ResetCounts()
-		foo, err := cp.ReadInstallation("foo")
+		foo, err := cp.ReadInstallation("", "foo")
 		require.NoError(t, err, "ReadInstallation failed")
 
 		assert.Equal(t, "foo", foo.Name)
@@ -336,14 +360,14 @@ func TestClaimStore_Installations(t *testing.T) {
 	})
 
 	t.Run("ReadInstallation - invalid installation", func(t *testing.T) {
-		foo, err := cp.ReadInstallation("missing")
+		foo, err := cp.ReadInstallation("", "missing")
 		require.EqualError(t, err, "Installation does not exist")
 		assert.Empty(t, foo)
 	})
 
 	t.Run("ReadAllInstallations", func(t *testing.T) {
 		datastore.ResetCounts()
-		foo, err := cp.ReadInstallation("foo")
+		foo, err := cp.ReadInstallation("", "foo")
 		require.NoError(t, err, "ReadInstallation failed")
 
 		assert.Equal(t, "foo", foo.Name)
@@ -353,7 +377,7 @@ func TestClaimStore_Installations(t *testing.T) {
 	})
 
 	t.Run("ReadAllInstallations - invalid installation", func(t *testing.T) {
-		foo, err := cp.ReadInstallation("missing")
+		foo, err := cp.ReadInstallation("", "missing")
 		require.EqualError(t, err, "Installation does not exist")
 		assert.Empty(t, foo)
 	})
@@ -367,7 +391,7 @@ func TestClaimStore_DeleteInstallation(t *testing.T) {
 
 	assertSingleConnection(t, datastore)
 
-	names, err := cp.ListInstallations()
+	names, err := cp.ListInstallations("")
 	require.NoError(t, err, "ListInstallations failed")
 	assert.Equal(t, []string{"bar", "baz"}, names, "expected foo to be deleted completely")
 
@@ -802,7 +826,7 @@ func TestStore_EncryptOutputs(t *testing.T) {
 func TestStore_GetLastOutputs_OutputDefinitionRemoved(t *testing.T) {
 	cp, _ := generateClaimData(t)
 
-	foo, err := cp.ReadInstallation("foo")
+	foo, err := cp.ReadInstallation("", "foo")
 	require.NoError(t, err, "ReadInstallation failed")
 
 	claims, err := cp.ReadAllClaims(foo.Name)
