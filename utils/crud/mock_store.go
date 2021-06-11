@@ -89,7 +89,7 @@ func (s MockStore) key(itemType string, id string) string {
 	return path.Join(itemType, id)
 }
 
-func (s MockStore) Count(itemType string, group string) (int, error) {
+func (s MockStore) Count(opts QueryOptions) (int, error) {
 	names, err := s.List(itemType, group)
 	return len(names), err
 }

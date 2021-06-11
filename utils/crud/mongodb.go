@@ -69,8 +69,8 @@ func (s *mongoDBStore) getCollection(itemType string) *mgo.Collection {
 	return c
 }
 
-func (s *mongoDBStore) Count(itemType string, group string) (int, error) {
-	collection := s.getCollection(itemType)
+func (s *mongoDBStore) Count(opts QueryOptions) (int, error) {
+	collection := s.getCollection(opts.Document.GetType())
 
 	var query map[string]string
 	if group != "" {

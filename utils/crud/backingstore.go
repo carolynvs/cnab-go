@@ -74,14 +74,14 @@ func (s *BackingStore) autoClose() error {
 	return nil
 }
 
-func (s *BackingStore) Count(itemType string, group string) (int, error) {
+func (s *BackingStore) Count(opts QueryOptions) (int, error) {
 	handleClose, err := s.HandleConnect()
 	defer handleClose()
 	if err != nil {
 		return 0, err
 	}
 
-	return s.datastore.Count(itemType, group)
+	return s.datastore.Count()
 }
 
 func (s *BackingStore) List(itemType string, group string) ([]string, error) {

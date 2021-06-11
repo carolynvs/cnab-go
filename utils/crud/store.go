@@ -9,7 +9,7 @@ import (
 // Store is a simplified interface to a key-blob store supporting CRUD operations.
 type Store interface {
 	// Count the number of items of the optional type and group.
-	Count(itemType string, group string) (int, error)
+	Count(opts QueryOptions) (int, error)
 
 	// List the names of the items of the optional type and group.
 	List(itemType string, group string) ([]string, error)
